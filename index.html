@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Repo Builder: Fix execute.py, Convert data.xlsx → data.csv, and Add CI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #11162a;
+      --muted: #9fb0c3;
+      --fg: #e8eef6;
+      --accent: #54c2ff;
+      --green: #39d98a;
+      --orange: #ffa657;
+      --red: #ff6b6b;
+      --blue: #61dafb;
+      --border: #1e2747;
+      --code: #0a1020;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(120deg, #0b1020, #0c1430 60%, #0b1020);
+      color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      line-height: 1.4;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header {
+      padding: 28px 20px 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(16,22,44,0.7);
+      position: sticky;
+      top: 0;
+      backdrop-filter: blur(10px);
+      z-index: 5;
+    }
+    header h1 { margin: 0 0 6px; font-size: 22px; }
+    header p { margin: 0; color: var(--muted); font-size: 14px; }
+    main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 18px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card h3 {
+      margin: 16px 0 8px;
+      font-size: 15px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .steps ol { margin: 0; padding-left: 18px; }
+    .steps li { margin: 8px 0; }
+    .muted { color: var(--muted); }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .btn {
+      background: #1a2142;
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn:hover { background: #1b2450; }
+    .btn.primary { background: #1a3456; border-color: #214a78; }
+    .btn.primary:hover { background: #1c3b62; }
+    .btn.success { background: #124d35; border-color: #1a8f61; }
+    .btn.success:hover { background: #146143; }
+    .btn.warn { background: #5a3a14; border-color: #9c6b2a; }
+    .btn.warn:hover { background: #6c4719; }
+    .code {
+      background: #0a0f20;
+      color: #d6e6ff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      max-height: 320px;
+      overflow: auto;
+      position: relative;
+    }
+    .path {
+      display: inline-block;
+      padding: 2px 8px;
+      background: #0e1430;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .hint {
+      padding: 10px 12px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      background: #0c1230;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .ok { color: var(--green); }
+    .warnTxt { color: var(--orange); }
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 30px 10px;
+    }
+    .pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); background: #0c1230; color: var(--muted); }
+    .sep { height: 10px; }
+    .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Repository Builder: Fix execute.py, add CI, and publish result.json</h1>
+  <p>Create execute.py, convert data.xlsx to data.csv, and add a GitHub Actions workflow that runs Ruff, executes the script, and publishes result.json via Pages.</p>
+</header>
+
+<main>
+  <div class="grid">
+    <section class="card steps">
+      <h2>Checklist</h2>
+      <ol>
+        <li>Create or update <span class="path">execute.py</span> with the fixed logic (Python 3.11+, Pandas 2.3).</li>
+        <li>Convert your provided <span class="path">data.xlsx</span> to <span class="path">data.csv</span> and commit <span class="path">data.csv</span> (do not commit result.json).</li>
+        <li>Add a workflow at <span class="path">.github/workflows/ci.yml</span> that:
+          <ul>
+            <li>Installs Python 3.11, Pandas 2.3, openpyxl, and ruff.</li>
+            <li>Runs ruff and shows results in the CI log.</li>
+            <li>Runs: <span class="mono">python execute.py &gt; result.json</span></li>
+            <li>Publishes <span class="path">result.json</span> via GitHub Pages.</li>
+          </ul>
+        </li>
+        <li>Commit and push. GitHub Actions should run and deploy result.json to Pages.</li>
+      </ol>
+
+      <div class="hint" style="margin-top:10px">
+        Pro tip: Use the buttons below to copy or download each file. You can also generate a ready-to-commit ZIP including all files and your converted CSV.
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Convert data.xlsx → data.csv</h2>
+      <p class="muted">Upload your data.xlsx. It will be converted locally in your browser; no data leaves your device.</p>
+      <div class="row" style="margin-bottom:10px">
+        <input type="file" id="xlsxInput" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+        <button class="btn" id="toCsvBtn" disabled>Convert to CSV</button>
+        <a id="downloadCsvLink" class="btn success" style="display:none" download="data.csv">Download data.csv</a>
+      </div>
+      <div id="csvStatus" class="muted"></div>
+      <div class="sep"></div>
+      <div class="hint">
+        After downloading data.csv, add it to your repo root and commit it. The execute.py provided below reads data.csv (not data.xlsx) so CI will not need the Excel file.
+      </div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>File: <span class="path">execute.py</span></h2>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn" data-copy="execute">Copy</button>
+      <button class="btn" data-download="execute" data-filename="execute.py">Download</button>
+      <span class="pill">Python 3.11+ • Pandas 2.3</span>
+    </div>
+    <pre class="code" id="code-execute"><code>import json
+from typing import Dict, List
+
+import pandas as pd
+
+
+def main() -> None:
+    """
+    Reads data.csv, computes summary metrics, and prints a JSON report to stdout.
+
+    Output keys:
+    - row_count: total number of rows in the input.
+    - regions_count: number of distinct regions.
+    - top_n_products_by_revenue: list of top 3 products by total revenue.
+    - rolling_7d_revenue_by_region: per-region last value of a 7-day time-based moving average of daily revenue.
+
+    Note:
+    - Expects columns: date, region, product, units, price
+    - Input file: data.csv (converted from data.xlsx)
+    """
+    # Read the data (CSV version to simplify CI and avoid Excel engine issues)
+    df = pd.read_csv("data.csv")
+
+    # Compute revenue
+    df["revenue"] = df["units"] * df["price"]
+
+    # Basic metrics
+    row_count = int(len(df))
+    regions_count = int(df["region"].nunique())
+
+    # Top N products by total revenue
+    n = 3
+    top_products = (
+        df.groupby("product", as_index=False)["revenue"]
+        .sum()
+        .sort_values("revenue", ascending=False)
+        .head(n)
+    )
+    top_products_list: List[Dict[str, float]] = [
+        {"product": str(row["product"]), "revenue": float(row["revenue"])}
+        for _, row in top_products.iterrows()
+    ]
+
+    # Rolling 7-day moving average of daily revenue, per region (time-based window)
+    df["date"] = pd.to_datetime(df["date"], utc=False, errors="coerce")
+    # Drop rows with invalid dates to avoid issues downstream
+    df = df.dropna(subset=["date"])
+
+    daily_rev = (
+        df.groupby(["region", "date"], as_index=False)["revenue"]
+        .sum()
+        .sort_values(["region", "date"])
+    )
+
+    last_7d_ma_by_region: Dict[str, float] = {}
+    for region, g in daily_rev.groupby("region"):
+        # Ensure daily frequency to handle gaps (use sum in case of multiple rows per date)
+        ts = g.set_index("date")["revenue"].sort_index().resample("D").sum()
+        # Time-based rolling window over the last 7 calendar days
+        ma = ts.rolling("7D").mean()
+        last_val = float(ma.iloc[-1]) if len(ma) > 0 else 0.0
+        last_7d_ma_by_region[str(region)] = last_val
+
+    result = {
+        "row_count": row_count,
+        "regions_count": regions_count,
+        "top_n_products_by_revenue": top_products_list,
+        "rolling_7d_revenue_by_region": last_7d_ma_by_region,
+    }
+
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+  </section>
+
+  <section class="card">
+    <h2>File: <span class="path">.github/workflows/ci.yml</span></h2>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn" data-copy="ci">Copy</button>
+      <button class="btn" data-download="ci" data-filename=".github/workflows/ci.yml">Download</button>
+      <span class="pill">Ruff • Build result.json • Publish Pages</span>
+    </div>
+    <pre class="code" id="code-ci"><code>name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "pandas==2.3.*" openpyxl ruff
+
+      - name: Ruff (lint)
+        continue-on-error: true
+        run: |
+          ruff --version
+          ruff check .
+
+      - name: Build result.json
+        run: |
+          python execute.py > result.json
+          echo "Generated result.json:"
+          head -n 50 result.json || true
+
+      - name: Prepare Pages artifact
+        run: |
+          mkdir -p public
+          mv result.json public/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+</code></pre>
+  </section>
+
+  <section class="card">
+    <h2>Optional: <span class="path">.gitignore</span></h2>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn" data-copy="gitignore">Copy</button>
+      <button class="btn" data-download="gitignore" data-filename=".gitignore">Download</button>
+      <span class="pill">Prevent committing result.json</span>
+    </div>
+    <pre class="code" id="code-gitignore"><code># Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editors
+.vscode/
+.idea/
+
+# Do not commit build outputs
+result.json
+public/
+</code></pre>
+  </section>
+
+  <section class="card">
+    <h2>One-click ZIP</h2>
+    <p class="muted">Generate a ready-to-commit zip containing execute.py, .github/workflows/ci.yml, README.md, and (if converted) data.csv.</p>
+    <div class="row" style="margin-bottom:8px">
+      <button id="makeZip" class="btn primary">Generate repo.zip</button>
+      <span id="zipStatus" class="muted"></span>
+    </div>
+    <div class="hint">
+      After extracting, run:
+      <pre class="code"><code>git add .
+git commit -m "Fix execute.py, add CI workflow, and add data.csv"
+git push origin &lt;your-branch&gt;</code></pre>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Verification tips</h2>
+    <ul>
+      <li>Ensure <span class="path">execute.py</span> contains no "revenew" typo and reads <span class="path">data.csv</span>.</li>
+      <li>Confirm <span class="path">data.csv</span> is a faithful conversion of the provided <span class="path">data.xlsx</span>.</li>
+      <li>Check Actions logs: Ruff output visible, and <span class="mono">python execute.py &gt; result.json</span> ran successfully.</li>
+      <li>Visit your repository’s GitHub Pages URL to access <span class="path">result.json</span>.</li>
+    </ul>
+  </section>
+</main>
+
+<footer>
+  Built for Python 3.11+, Pandas 2.3. Ruff runs in CI. Pages publishes result.json (not committed).
+</footer>
+
+<!-- Libraries for CSV conversion + ZIP -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha256-dl4w4e5do0nYlBdcn1YcCe/1p2PzRn+UoM5cRAkOBvE=" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" integrity="sha256-cro0K7G8/GiPR6R1sos1Yw8+ChMBAVQF8Vf5xol4mZg=" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js" integrity="sha256-3h9ExH6WqSxd7LC2pX2xO1i9XzERb/7w6jivyZlZ7kA=" crossorigin="anonymous"></script>
+<script>
+  const files = {
+    execute: `import json
+from typing import Dict, List
+
+import pandas as pd
+
+
+def main() -> None:
+    """
+    Reads data.csv, computes summary metrics, and prints a JSON report to stdout.
+
+    Output keys:
+    - row_count: total number of rows in the input.
+    - regions_count: number of distinct regions.
+    - top_n_products_by_revenue: list of top 3 products by total revenue.
+    - rolling_7d_revenue_by_region: per-region last value of a 7-day time-based moving average of daily revenue.
+
+    Note:
+    - Expects columns: date, region, product, units, price
+    - Input file: data.csv (converted from data.xlsx)
+    """
+    # Read the data (CSV version to simplify CI and avoid Excel engine issues)
+    df = pd.read_csv("data.csv")
+
+    # Compute revenue
+    df["revenue"] = df["units"] * df["price"]
+
+    # Basic metrics
+    row_count = int(len(df))
+    regions_count = int(df["region"].nunique())
+
+    # Top N products by total revenue
+    n = 3
+    top_products = (
+        df.groupby("product", as_index=False)["revenue"]
+        .sum()
+        .sort_values("revenue", ascending=False)
+        .head(n)
+    )
+    top_products_list: List[Dict[str, float]] = [
+        {"product": str(row["product"]), "revenue": float(row["revenue"])}
+        for _, row in top_products.iterrows()
+    ]
+
+    # Rolling 7-day moving average of daily revenue, per region (time-based window)
+    df["date"] = pd.to_datetime(df["date"], utc=False, errors="coerce")
+    # Drop rows with invalid dates to avoid issues downstream
+    df = df.dropna(subset=["date"])
+
+    daily_rev = (
+        df.groupby(["region", "date"], as_index=False)["revenue"]
+        .sum()
+        .sort_values(["region", "date"])
+    )
+
+    last_7d_ma_by_region: Dict[str, float] = {}
+    for region, g in daily_rev.groupby("region"):
+        # Ensure daily frequency to handle gaps (use sum in case of multiple rows per date)
+        ts = g.set_index("date")["revenue"].sort_index().resample("D").sum()
+        # Time-based rolling window over the last 7 calendar days
+        ma = ts.rolling("7D").mean()
+        last_val = float(ma.iloc[-1]) if len(ma) > 0 else 0.0
+        last_7d_ma_by_region[str(region)] = last_val
+
+    result = {
+        "row_count": row_count,
+        "regions_count": regions_count,
+        "top_n_products_by_revenue": top_products_list,
+        "rolling_7d_revenue_by_region": last_7d_ma_by_region,
+    }
+
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()
+`,
+    ci: `name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "pandas==2.3.*" openpyxl ruff
+
+      - name: Ruff (lint)
+        continue-on-error: true
+        run: |
+          ruff --version
+          ruff check .
+
+      - name: Build result.json
+        run: |
+          python execute.py > result.json
+          echo "Generated result.json:"
+          head -n 50 result.json || true
+
+      - name: Prepare Pages artifact
+        run: |
+          mkdir -p public
+          mv result.json public/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+`,
+    gitignore: `# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editors
+.vscode/
+.idea/
+
+# Do not commit build outputs
+result.json
+public/
+`,
+    readme: `# Data Pipeline: execute.py + CI + Pages
+
+## Overview
+
+This repository contains:
+- A fixed \`execute.py\` compatible with Python 3.11+ and Pandas 2.3 that computes:
+  - row_count
+  - regions_count
+  - top 3 products by total revenue
+  - per-region last value of a 7-day time-based moving average of daily revenue
+- A GitHub Actions workflow at \`.github/workflows/ci.yml\` that:
+  - Runs Ruff and prints results in the CI logs
+  - Runs \`python execute.py > result.json\`
+  - Publishes \`result.json\` to GitHub Pages
+- A CSV version of the input data: \`data.csv\` (converted from \`data.xlsx\`)
+
+Important: \`result.json\` is NOT committed; it is generated by CI and published via GitHub Pages.
+
+## Setup
+
+1. Ensure you have Python 3.11+ and pip.
+2. Install dependencies locally (optional, CI installs them for you):
+   \`\`\`bash
+   python -m pip install --upgrade pip
+   pip install "pandas==2.3.*" openpyxl ruff
+   \`\`\`
+
+## Usage
+
+1. Convert your provided Excel file to CSV:
+   - Convert \`data.xlsx\` to \`data.csv\` (same columns: date, region, product, units, price).
+   - Commit \`data.csv\` to the repository root.
+   - Do not commit \`result.json\`.
+
+2. Run locally (optional):
+   \`\`\`bash
+   python execute.py > result.json
+   cat result.json
+   \`\`\`
+
+3. Push to GitHub:
+   - Commit:
+     \`\`\`bash
+     git add execute.py data.csv .github/workflows/ci.yml
+     git commit -m "Fix execute.py, add CI workflow, and add data.csv"
+     git push
+     \`\`\`
+   - GitHub Actions will:
+     - Install dependencies
+     - Run Ruff (results visible in logs)
+     - Generate \`result.json\`
+     - Publish it to GitHub Pages
+
+4. View result:
+   - Visit your repository’s GitHub Pages URL (from the Deploy step logs) and access \`/result.json\`.
+
+`
+  };
+
+  // Copy / Download handlers
+  function copyText(id) {
+    const txt = files[id];
+    navigator.clipboard.writeText(txt).then(() => {
+      toast('Copied to clipboard');
+    });
+  }
+  function downloadText(id, filename) {
+    const blob = new Blob([files[id]], { type: 'text/plain;charset=utf-8' });
+    saveAs(blob, filename);
+  }
+
+  document.querySelectorAll('button[data-copy]').forEach(btn => {
+    btn.addEventListener('click', () => copyText(btn.getAttribute('data-copy')));
+  });
+  document.querySelectorAll('button[data-download]').forEach(btn => {
+    btn.addEventListener('click', () => downloadText(btn.getAttribute('data-download'), btn.getAttribute('data-filename')));
+  });
+
+  // Simple toast
+  let toastTimer;
+  function toast(msg) {
+    clearTimeout(toastTimer);
+    let t = document.getElementById('toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'toast';
+      t.style.position = 'fixed';
+      t.style.bottom = '20px';
+      t.style.left = '50%';
+      t.style.transform = 'translateX(-50%)';
+      t.style.background = '#10173a';
+      t.style.border = '1px solid #23315e';
+      t.style.color = '#e8eef6';
+      t.style.padding = '10px 14px';
+      t.style.borderRadius = '10px';
+      t.style.boxShadow = '0 8px 20px rgba(0,0,0,0.35)';
+      t.style.zIndex = '999';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.opacity = '1';
+    toastTimer = setTimeout(() => { t.style.opacity = '0'; }, 1600);
+  }
+
+  // XLSX to CSV conversion
+  const xlsxInput = document.getElementById('xlsxInput');
+  const toCsvBtn = document.getElementById('toCsvBtn');
+  const downloadCsvLink = document.getElementById('downloadCsvLink');
+  const csvStatus = document.getElementById('csvStatus');
+
+  let csvBlob = null;
+
+  xlsxInput.addEventListener('change', () => {
+    toCsvBtn.disabled = !xlsxInput.files?.length;
+    downloadCsvLink.style.display = 'none';
+    csvStatus.textContent = '';
+    csvBlob = null;
+  });
+
+  toCsvBtn.addEventListener('click', async () => {
+    const file = xlsxInput.files?.[0];
+    if (!file) return;
+    csvStatus.textContent = 'Reading Excel...';
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: 'array' });
+
+    // Choose the first sheet by default
+    const firstSheetName = wb.SheetNames[0];
+    const ws = wb.Sheets[firstSheetName];
+
+    // Convert to CSV (RFC compliant)
+    const csv = XLSX.utils.sheet_to_csv(ws, { FS: ',', RS: '\n' });
+
+    csvBlob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(csvBlob);
+    downloadCsvLink.href = url;
+    downloadCsvLink.style.display = 'inline-block';
+    csvStatus.innerHTML = '<span class="ok">Converted successfully.</span> Download and commit data.csv.';
+    toast('CSV ready');
+  });
+
+  // ZIP generator
+  const makeZipBtn = document.getElementById('makeZip');
+  const zipStatus = document.getElementById('zipStatus');
+
+  makeZipBtn.addEventListener('click', async () => {
+    zipStatus.textContent = 'Building zip...';
+    const zip = new JSZip();
+
+    // Add files
+    zip.file('execute.py', files.execute);
+    zip.file('README.md', files.readme);
+    zip.file('.gitignore', files.gitignore);
+
+    const wf = zip.folder('.github')?.folder('workflows');
+    wf.file('ci.yml', files.ci);
+
+    if (csvBlob) {
+      zip.file('data.csv', csvBlob);
+    }
+
+    const content = await zip.generateAsync({ type: 'blob' });
+    saveAs(content, 'repo.zip');
+    zipStatus.textContent = 'repo.zip downloaded.';
+    toast('repo.zip ready');
+  });
+</script>
+</body>
+</html>
